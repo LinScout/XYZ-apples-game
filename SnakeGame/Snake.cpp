@@ -1,277 +1,290 @@
 #include "Snake.h"
-#include <assert.h>
-#include "GameSettings.h"
-#include "Sprite.h"
-
-
-namespace
-{
-	// id textures
-	const std::string HEAD_TEXTURE_ID = "Head";
-	const std::string BODY_TEXTURE_ID = "Body";
-	const std::string BODY_BEND_TEXTURE_ID = "BodyBend";
-	const std::string TAIL_TEXTURE_ID = "Tail";
-
-	void SetHeadSprite(SnakeGame::Snake& snake, std::list<sf::Sprite>::iterator it)
-	{
-		float angle = 0.f; // Up
-		if (snake.direction == SnakeGame::SnakeDirection::Right) { // Right
-			angle = 90.f;
-		}
-		else if (snake.direction == SnakeGame::SnakeDirection::Down) { // Down
-			angle = 180.f;
-		}
-		else if (snake.direction == SnakeGame::SnakeDirection::Left) { // Left
-			angle = -90.f;
-		}
-
-		it->setTexture(snake.textures[(size_t)SnakeGame::SnakePart::Head]);
-		it->setRotation(angle);
-	}
-
-	void SetTailSprite(SnakeGame::Snake& snake, std::list<sf::Sprite>::iterator it)
-	{
-		it->setTexture(snake.textures[(size_t)SnakeGame::SnakePart::Tail]);
-
-		auto nextIt = std::next(it);
-		if (nextIt == snake.body.end()) {
-			return;
-		}
-
-		float angle = 0.f; // Up
-		if (nextIt->getPosition().x < it->getPosition().x) { // Left
-			angle = -90.f;
-		}
-		else if (nextIt->getPosition().x > it->getPosition().x) { // Right
-			angle = 90.f;
-		}
-		else if (nextIt->getPosition().y > it->getPosition().y) { // Down
-			angle = 180.f;
-		}
-		
-		it->setRotation(angle);
-	}
-
-	sf::Sprite GetRotationSprite(
-		SnakeGame::Snake& snake,
-		SnakeGame::SnakeDirection oldDirection, 
-		SnakeGame::SnakeDirection newDirection)
-	{
-		sf::Sprite sprite;
-		SnakeGame::InitSprite(
-			sprite,
-			SnakeGame::SNAKE_SIZE,
-			SnakeGame::SNAKE_SIZE,
-			snake.textures[(size_t)SnakeGame::SnakePart::BodyBend]);
-		
-		float angle = 0.f;
-		if (oldDirection == SnakeGame::SnakeDirection::Right && newDirection == SnakeGame::SnakeDirection::Up ||
-			oldDirection == SnakeGame::SnakeDirection::Down && newDirection == SnakeGame::SnakeDirection::Left) {
-			angle = 0.f;
-		} else if (oldDirection == SnakeGame::SnakeDirection::Down && newDirection == SnakeGame::SnakeDirection::Right ||
-			oldDirection == SnakeGame::SnakeDirection::Left && newDirection == SnakeGame::SnakeDirection::Up) {
-			angle = 90.f;
-		} else if (oldDirection == SnakeGame::SnakeDirection::Left && newDirection == SnakeGame::SnakeDirection::Down ||
-			oldDirection == SnakeGame::SnakeDirection::Up && newDirection == SnakeGame::SnakeDirection::Right) {
-			angle = 180;
-		} else if (oldDirection == SnakeGame::SnakeDirection::Up && newDirection == SnakeGame::SnakeDirection::Left ||
-			oldDirection == SnakeGame::SnakeDirection::Right && newDirection == SnakeGame::SnakeDirection::Down) {
-			angle = -90.f;
-		}
-
-		sprite.setRotation(angle);
-		return sprite;
-	}
-}
+#include <cassert>
 
 namespace SnakeGame
 {
-	void LoadSnakeTextures(Snake& snake)
+	// ---- helpers -------------------------------------------------------
+
+	static sf::Vector2f CellCenter(const Position2D& pos)
 	{
-		assert(snake.textures[(size_t)SnakePart::Head].loadFromFile(TEXTURES_PATH + HEAD_TEXTURE_ID + ".png"));
-		assert(snake.textures[(size_t)SnakePart::Body].loadFromFile(TEXTURES_PATH + BODY_TEXTURE_ID + ".png"));
-		assert(snake.textures[(size_t)SnakePart::BodyBend].loadFromFile(TEXTURES_PATH + BODY_BEND_TEXTURE_ID + ".png"));
-		assert(snake.textures[(size_t)SnakePart::Tail].loadFromFile(TEXTURES_PATH + TAIL_TEXTURE_ID + ".png"));
+		return { pos.x * GRID_SIZE + GRID_SIZE / 2.f,
+		         pos.y * GRID_SIZE + GRID_SIZE / 2.f };
 	}
 
-	void InitSnake(Snake& snake)
+	static void FitSprite(sf::Sprite& sprite, const sf::Texture& tex)
 	{
-		auto addSprite = [](Snake& snake, const sf::Texture& texture, const sf::Vector2f& position) {
-			sf::Sprite sprite;
-			InitSprite(sprite, SNAKE_SIZE, SNAKE_SIZE, texture);
-			sprite.setPosition(position);
-			snake.body.push_front(sprite);
-		};
-		addSprite(
-			snake,
-			snake.textures[(size_t)SnakePart::Head],
-			{ (float)SCREEN_WIDTH / 2.f, (float)SCREEN_HEGHT / 2.f }
-		);
-		addSprite(
-			snake,
-			snake.textures[(size_t)SnakePart::Tail],
-			{ (float)SCREEN_WIDTH / 2.f, (float)SCREEN_HEGHT / 2.f + SNAKE_SIZE * (INITIAL_SNAKE_SIZE - 1)}
-		);
-		snake.head = --snake.body.end();
-		snake.tail = snake.body.begin();
-		
-		snake.speed = INITIAL_SPEED;
-		snake.prevDirection = snake.direction = SnakeDirection::Up;
+		sprite.setTexture(tex, true);
+		sf::FloatRect b = sprite.getLocalBounds();
+		sprite.setOrigin(b.width / 2.f, b.height / 2.f);
+		sprite.setScale((float)GRID_SIZE / b.width, (float)GRID_SIZE / b.height);
 	}
 
-	void MoveSnake(Snake& snake, float timeDelta)
+	static void FitBodySprite(sf::Sprite& sprite, const sf::Texture& tex)
 	{
-		float shift = snake.speed * timeDelta;
-		const sf::Vector2f direction = GetDirectionVector(snake.direction) * shift / SNAKE_SIZE;
-		auto prevHead = snake.head;
-
-		// new rotation
-		if (snake.prevDirection != snake.direction) {
-			snake.head = snake.body.insert(++snake.head, *prevHead);
-			SetHeadSprite(snake, snake.head);
-			
-			*prevHead = GetRotationSprite(snake, snake.prevDirection, snake.direction);
-			prevHead->setPosition(snake.head->getPosition());
-		}
-		snake.head->setPosition(snake.head->getPosition() + direction);
-		
-		auto nextTail = std::next(snake.tail);
-		auto tailDirection = GetVectorBetweenSprites(*snake.tail, *nextTail);
-		auto dist = GetManhattanDistanceBetweenSprites(*snake.tail, *nextTail);
-
-		if (shift > dist) {
-			shift -= dist;
-			snake.tail = snake.body.erase(snake.tail);
-			SetTailSprite(snake, snake.tail);
-		}
-		else {
-			snake.tail->setPosition(snake.tail->getPosition() + tailDirection * shift / dist);
-		}
-
-		snake.prevDirection = snake.direction;
+		sprite.setTexture(tex, true);
+		sf::FloatRect b = sprite.getLocalBounds();
+		sprite.setOrigin(b.width / 2.f, b.height / 2.f);
+		// For body segments, make them slightly smaller to fit perfectly in grid
+		float scale = (float)GRID_SIZE / b.width * 0.98f; // 2% smaller to eliminate gaps
+		sprite.setScale(scale, scale);
 	}
 
-	void GrowSnake(Snake& snake)
+	// ---- texture selection ---------------------------------------------
+
+	bool LoadSnakeTextures(SnakeTextures& t)
 	{
-		snake.head->setPosition(snake.head->getPosition() + GetDirectionVector(snake.direction));
+		bool ok = true;
+		ok &= t.head_up.loadFromFile       (TEXTURES_PATH + "head_up.png");
+		ok &= t.head_down.loadFromFile     (TEXTURES_PATH + "head_down.png");
+		ok &= t.head_left.loadFromFile     (TEXTURES_PATH + "head_left.png");
+		ok &= t.head_right.loadFromFile    (TEXTURES_PATH + "head_right.png");
+		ok &= t.body_vertical.loadFromFile  (TEXTURES_PATH + "body_vertical.png");
+		ok &= t.body_horizontal.loadFromFile(TEXTURES_PATH + "body_horizontal.png");
+		ok &= t.body_topleft.loadFromFile   (TEXTURES_PATH + "body_topleft.png");
+		ok &= t.body_topright.loadFromFile  (TEXTURES_PATH + "body_topright.png");
+		ok &= t.body_bottomleft.loadFromFile (TEXTURES_PATH + "body_bottomleft.png");
+		ok &= t.body_bottomright.loadFromFile(TEXTURES_PATH + "body_bottomright.png");
+		ok &= t.tail_up.loadFromFile       (TEXTURES_PATH + "tail_up.png");
+		ok &= t.tail_down.loadFromFile     (TEXTURES_PATH + "tail_down.png");
+		ok &= t.tail_left.loadFromFile     (TEXTURES_PATH + "tail_left.png");
+		ok &= t.tail_right.loadFromFile    (TEXTURES_PATH + "tail_right.png");
+		ok &= t.apple.loadFromFile         (TEXTURES_PATH + "apple.png");
+		return ok;
 	}
 
-	void DrawSnake(Snake& snake, sf::RenderWindow& window)
+	const sf::Texture& GetHeadTexture(const SnakeTextures& t, Direction dir)
 	{
-		// draw direct parts of body
-		for (auto it = snake.body.begin(); it != snake.head; ++it) {
-			auto nextIt = std::next(it);
-			float width = SNAKE_SIZE, height = GetManhattanDistanceBetweenSprites(*it, *nextIt) - SNAKE_SIZE;
-			float angle = it->getPosition().x != nextIt->getPosition().x ? 90.f : 0.f;
-
-			if (width > 0.f && height > 0.f) {
-				sf::Sprite sprite;
-				InitSprite(sprite, width, height, snake.textures[(size_t)SnakeGame::SnakePart::Body]);
-				auto position = (it->getPosition() + nextIt->getPosition()) / 2.f;
-				sprite.setPosition(position);
-				sprite.setRotation(angle);
-				DrawSprite(sprite, window);
-			}
-		}
-
-		// draw others
-		DrawSprites(snake.body.begin(), snake.body.end(), window);
-	}
-
-	bool HasSnakeCollisionWithRect(const Snake& snake, const sf::FloatRect& rect)
-	{
-		sf::Vector2f forwardPoint = snake.head->getPosition();
-		if (snake.direction == SnakeDirection::Up) {
-			forwardPoint.y -= SNAKE_SIZE / 2.f;
-		}
-		else if (snake.direction == SnakeDirection::Right) {
-			forwardPoint.x += SNAKE_SIZE / 2.f;
-		}
-		else if (snake.direction == SnakeDirection::Down) {
-			forwardPoint.y += SNAKE_SIZE / 2.f;
-		}
-		else {
-			forwardPoint.x -= SNAKE_SIZE / 2.f;
-		}
-
-		bool result = rect.contains(forwardPoint);
-		return result;
-	}
-
-	bool CheckSnakeCollisionWithHimself(Snake& snake)
-	{
-		auto curIt = snake.tail;
-		auto nextIt = std::next(snake.tail);
-		while (nextIt != snake.head) {
-			auto curRect = curIt->getGlobalBounds();
-			auto nextRect = nextIt->getGlobalBounds();
-
-			sf::FloatRect unionRect;
-			unionRect.top = std::min(curRect.top, nextRect.top);
-			unionRect.left = std::min(curRect.left, nextRect.left);
-			unionRect.width = std::fabs(curRect.left - nextRect.left) + SNAKE_SIZE;
-			unionRect.height = std::fabs(curRect.top - nextRect.top) + SNAKE_SIZE;
-
-			if (HasSnakeCollisionWithRect(snake, unionRect)) {
-				return true;
-			}
-			curIt = nextIt;
-			nextIt = std::next(nextIt);
-		}
-		return false;
-	}
-
-	bool CheckSnakeCollisionWithSprite(Snake& snake, const sf::Sprite& sprite)
-	{
-		auto curIt = snake.tail;
-
-		while (curIt != snake.head) {
-			auto nextIt = std::next(curIt);
-			auto curRect = curIt->getGlobalBounds();
-			auto nextRect = nextIt->getGlobalBounds();
-
-			sf::FloatRect unionRect;
-			unionRect.top = std::min(curRect.top, nextRect.top);
-			unionRect.left = std::min(curRect.left, nextRect.left);
-			unionRect.width = std::fabs(curRect.left - nextRect.left) + SNAKE_SIZE;
-			unionRect.height = std::fabs(curRect.top - nextRect.top) + SNAKE_SIZE;
-
-			if (HasSnakeCollisionWithRect(snake, unionRect)) {
-				return true;
-			}
-			curIt = nextIt;
-		}
-		return false;
-	}
-
-	sf::Vector2f GetDirectionVector(SnakeDirection direction)
-	{
-		sf::Vector2f result;
-	
-		switch (direction)
+		switch (dir)
 		{
-			case SnakeDirection::Up:
+		case Direction::Up:    return t.head_up;
+		case Direction::Down:  return t.head_down;
+		case Direction::Left:  return t.head_left;
+		default:               return t.head_right;
+		}
+	}
+
+	const sf::Texture& GetTailTexture(const SnakeTextures& t, Direction dir)
+	{
+		switch (dir)
+		{
+		case Direction::Up:    return t.tail_up;
+		case Direction::Down:  return t.tail_down;
+		case Direction::Left:  return t.tail_left;
+		default:               return t.tail_right;
+		}
+	}
+
+	// from = direction the segment came from (where prev segment is)
+	// to   = direction the segment goes to   (where next segment is)
+	// For a straight segment from==to; for a bend they differ.
+	const sf::Texture& GetBodyTexture(const SnakeTextures& t, Direction from, Direction to)
+	{
+		// Straight
+		if (from == to)
+		{
+			if (from == Direction::Up || from == Direction::Down) return t.body_vertical;
+			return t.body_horizontal;
+		}
+		// Bends — order-independent pairs
+		auto is = [&](Direction a, Direction b) {
+			return (from == a && to == b) || (from == b && to == a);
+		};
+		if (is(Direction::Up,   Direction::Right)) return t.body_topright;
+		if (is(Direction::Up,   Direction::Left))  return t.body_topleft;
+		if (is(Direction::Down, Direction::Right)) return t.body_bottomright;
+		if (is(Direction::Down, Direction::Left))  return t.body_bottomleft;
+		// fallback
+		return t.body_vertical;
+	}
+
+	// ---- direction of the tail segment (points away from body) ---------
+	// The tail points in the direction AWAY from the segment before it.
+	static Direction TailDirection(const Snake& snake)
+	{
+		if (snake.segments.size() < 2) return snake.direction;
+		const Position2D& tail = snake.segments.back().position;
+		const Position2D& prev = snake.segments[snake.segments.size() - 2].position;
+		int dx = tail.x - prev.x;
+		int dy = tail.y - prev.y;
+		if (dx ==  1) return Direction::Right;
+		if (dx == -1) return Direction::Left;
+		if (dy ==  1) return Direction::Down;
+		return Direction::Up;
+	}
+
+	// ---- rebuild all sprites after a move ------------------------------
+	static void RefreshSprites(Snake& snake, const SnakeTextures& tex)
+	{
+		size_t n = snake.segments.size();
+		for (size_t i = 0; i < n; ++i)
+		{
+			SnakeSegment& seg = snake.segments[i];
+			const sf::Texture* t = nullptr;
+
+			if (i == 0) // head
 			{
-				result = { 0.f, -SNAKE_SIZE };
-				break;
+				t = &GetHeadTexture(tex, snake.direction);
 			}
-			case SnakeDirection::Right:
+			else if (i == n - 1) // tail
 			{
-				result = { SNAKE_SIZE, 0.f };
-				break;
+				t = &GetTailTexture(tex, TailDirection(snake));
 			}
-			case SnakeDirection::Down:
+			else // body
 			{
-				result = { 0.f, SNAKE_SIZE };
-				break;
+				// from = direction toward previous segment
+				const Position2D& prev = snake.segments[i - 1].position;
+				const Position2D& cur  = snake.segments[i].position;
+				const Position2D& next = snake.segments[i + 1].position;
+
+				// direction from cur toward prev
+				Direction toPrev, toNext;
+				int dx = prev.x - cur.x, dy = prev.y - cur.y;
+				if      (dx ==  1) toPrev = Direction::Right;
+				else if (dx == -1) toPrev = Direction::Left;
+				else if (dy ==  1) toPrev = Direction::Down;
+				else               toPrev = Direction::Up;
+
+				dx = next.x - cur.x; dy = next.y - cur.y;
+				if      (dx ==  1) toNext = Direction::Right;
+				else if (dx == -1) toNext = Direction::Left;
+				else if (dy ==  1) toNext = Direction::Down;
+				else               toNext = Direction::Up;
+
+				t = &GetBodyTexture(tex, toPrev, toNext);
 			}
-			case SnakeDirection::Left:
-			{
-				result = { -SNAKE_SIZE, 0.f };
-				break;
-			}
+
+			// Use appropriate fitting function based on segment type
+			if (i == 0 || i == n - 1) // head or tail
+				FitSprite(seg.sprite, *t);
+			else // body
+				FitBodySprite(seg.sprite, *t);
+			seg.sprite.setPosition(CellCenter(seg.position));
+		}
+	}
+
+	// ---- public API ----------------------------------------------------
+
+	void InitSnake(Snake& snake, const SnakeTextures& tex)
+	{
+		snake.segments.clear();
+		snake.direction     = Direction::Right;
+		snake.nextDirection = Direction::Right;
+		snake.moveTimer     = 0.f;
+		snake.moveInterval  = INITIAL_SPEED;
+		snake.isAlive       = true;
+		snake.shouldGrowTail = false;
+
+		int startX = GRID_WIDTH  / 2;
+		int startY = GRID_HEIGHT / 2;
+
+		for (int i = 0; i < INITIAL_SNAKE_LENGTH; ++i)
+		{
+			SnakeSegment seg;
+			seg.position = { startX - i, startY };
+			snake.segments.push_back(seg);
 		}
 
-		return result;
+		RefreshSprites(snake, tex);
+	}
+
+	void SetSnakeDirection(Snake& snake, Direction dir)
+	{
+		if ((snake.direction == Direction::Up    && dir == Direction::Down)  ||
+			(snake.direction == Direction::Down  && dir == Direction::Up)    ||
+			(snake.direction == Direction::Left  && dir == Direction::Right) ||
+			(snake.direction == Direction::Right && dir == Direction::Left))
+			return;
+		snake.nextDirection = dir;
+	}
+
+	void UpdateSnake(Snake& snake, float deltaTime)
+	{
+		if (!snake.isAlive) return;
+		snake.moveTimer += deltaTime;
+		if (snake.moveTimer >= snake.moveInterval)
+		{
+			snake.moveTimer = 0.f;
+			snake.direction = snake.nextDirection;
+			// MoveSnake is called from Game with textures
+		}
+	}
+
+	void MoveSnake(Snake& snake, const SnakeTextures& tex)
+	{
+		if (snake.segments.empty()) return;
+
+		Position2D newHead = snake.segments[0].position;
+		switch (snake.direction)
+		{
+		case Direction::Up:    newHead.y--; break;
+		case Direction::Down:  newHead.y++; break;
+		case Direction::Left:  newHead.x--; break;
+		case Direction::Right: newHead.x++; break;
+		}
+
+		// Move segments - if should grow, don't move the last segment (tail)
+		if (snake.shouldGrowTail && snake.segments.size() > 1)
+		{
+			// Move all segments except the last one (tail)
+			for (size_t i = snake.segments.size() - 1; i > 0; --i)
+				snake.segments[i].position = snake.segments[i - 1].position;
+		}
+		else
+		{
+			// Move all segments normally
+			for (size_t i = snake.segments.size() - 1; i > 0; --i)
+				snake.segments[i].position = snake.segments[i - 1].position;
+		}
+
+		snake.segments[0].position = newHead;
+		
+		// Reset grow flag
+		snake.shouldGrowTail = false;
+
+		RefreshSprites(snake, tex);
+	}
+
+	void GrowSnake(Snake& snake, const SnakeTextures& tex)
+	{
+		if (snake.segments.empty()) return;
+
+		// Add new segment at tail position
+		SnakeSegment seg;
+		seg.position = snake.segments.back().position;
+		snake.segments.push_back(seg);
+
+		// Set flag to prevent tail movement on next move
+		snake.shouldGrowTail = true;
+
+		snake.moveInterval -= SPEED_INCREASE;
+		if (snake.moveInterval < MIN_SPEED) snake.moveInterval = MIN_SPEED;
+
+		RefreshSprites(snake, tex);
+	}
+
+	bool CheckSelfCollision(const Snake& snake)
+	{
+		if (snake.segments.size() < 2) return false;
+		const Position2D& head = snake.segments[0].position;
+		for (size_t i = 1; i < snake.segments.size(); ++i)
+			if (head == snake.segments[i].position) return true;
+		return false;
+	}
+
+	bool CheckFoodCollision(const Snake& snake, const Position2D& foodPos)
+	{
+		if (snake.segments.empty()) return false;
+		return snake.segments[0].position == foodPos;
+	}
+
+	void DrawSnake(const Snake& snake, sf::RenderWindow& window)
+	{
+		for (int i = (int)snake.segments.size() - 1; i >= 0; --i)
+			window.draw(snake.segments[i].sprite);
+	}
+
+	const Position2D& GetHeadPosition(const Snake& snake)
+	{
+		return snake.segments[0].position;
 	}
 }

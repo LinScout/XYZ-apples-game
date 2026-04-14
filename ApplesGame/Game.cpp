@@ -1,21 +1,68 @@
 #include "Game.h"
 #include <cassert>
 
+using namespace std;
+
 namespace ApplesGame
 {
+	bool HandleExitDialog(Game& game)
+	{
+		// Возвращает true, если нужно закрыть игру
+		// Добавляем задержку для предотвращения мгновенного срабатывания
+		const float KEY_PRESS_DELAY = 0.2f;
+		
+		if (game.timeSinceLastKeyPress < KEY_PRESS_DELAY)
+		{
+			return false;
+		}
+
+		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Y))
+		{
+			return true; // Закрыть игру
+		}
+		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::N))
+		{
+			game.showExitDialog = false; // Закрыть диалог
+			game.timeSinceLastKeyPress = 0.f;
+		}
+		return false;
+	}
+
 	void StartPlayingState(Game& game)
 	{
 		SetPlayerPosition(game.player, { SCREEN_WIDTH / 2.f, SCREEN_HEIGHT / 2.f });
 		SetPlayerSpeed(game.player, INITIAL_SPEED);
 		SetPlayerDirection(game.player, PlayerDirection::Right);
 
-		// Init apples
+		// Init apples - сначала проверяем размер, если нужно - создаем
+		if (game.apples.size() != NUM_APPLES)
+		{
+			game.apples.clear();
+			game.apples.resize(NUM_APPLES);
+			for (int i = 0; i < NUM_APPLES; ++i)
+			{
+				InitApple(game.apples[i], game);
+			}
+		}
+		
+		// Устанавливаем позиции яблок
 		for (int i = 0; i < NUM_APPLES; ++i)
 		{
 			SetApplePosition(game.apples[i], GetRandomPositionInRectangle(game.screenRect));
 		}
 
-		// Init rocks
+		// Init rocks - сначала проверяем размер, если нужно - создаем
+		if (game.rocks.size() != NUM_ROCKS)
+		{
+			game.rocks.clear();
+			game.rocks.resize(NUM_ROCKS);
+			for (int i = 0; i < NUM_ROCKS; ++i)
+			{
+				InitRock(game.rocks[i], game);
+			}
+		}
+		
+		// Устанавливаем позиции камней
 		for (int i = 0; i < NUM_ROCKS; ++i)
 		{
 			SetRockPosition(game.rocks[i], GetRandomPositionInRectangle(game.screenRect));
@@ -24,7 +71,8 @@ namespace ApplesGame
 		game.numEatenApples = 0;
 		game.isGameFinished = false;
 		game.timeSinceGameFinish = 0;
-		game.scoreText.setString("Apples eaten: " + std::to_string(game.numEatenApples));
+		game.timeSinceLastKeyPress = 0.f;
+		game.scoreText.setString("Apples eaten: " + to_string(game.numEatenApples));
 	}
 
 	void UpdatePlayingState(Game& game, float deltaTime)
@@ -50,7 +98,7 @@ namespace ApplesGame
 		UpdatePlayer(game.player, deltaTime);
 
 		// Find player collisions with apples
-		for (int i = 0; i < NUM_APPLES; ++i)
+		for (size_t i = 0; i < game.apples.size(); ++i)
 		{
 			if (DoShapesCollide(GetPlayerCollider(game.player), GetAppleCollider(game.apples[i])))
 			{
@@ -58,12 +106,12 @@ namespace ApplesGame
 				++game.numEatenApples;
 				SetPlayerSpeed(game.player, GetPlayerSpeed(game.player) + ACCELERATION);
 				game.eatAppleSound.play();
-				game.scoreText.setString("Apples eaten: " + std::to_string(game.numEatenApples));
+				game.scoreText.setString("Apples eaten: " + to_string(game.numEatenApples));
 			}
 		}
 
 		// Find player collisions with rocks
-		for (int i = 0; i < NUM_ROCKS; ++i)
+		for (size_t i = 0; i < game.rocks.size(); ++i)
 		{
 			if (DoShapesCollide(GetPlayerCollider(game.player), GetRockCollider(game.rocks[i])))
 			{
@@ -84,7 +132,7 @@ namespace ApplesGame
 		game.timeSinceGameFinish = 0.f;
 		game.showLeaderboard = false;
 		game.gameOverSound.play();
-		game.gameOverScoreText.setString("Your scores: " + std::to_string(game.numEatenApples));
+		game.gameOverScoreText.setString("Your scores: " + to_string(game.numEatenApples));
 	}
 
 	void UpdateGameoverState(Game& game, float deltaTime)
@@ -103,11 +151,15 @@ namespace ApplesGame
 				game.background.setFillColor(sf::Color::Black);
 				
 				// Добавляем игрока в таблицу лидеров
-				if (game.leaderboard.useMapVersion)
+				if (game.leaderboard.currentType == LeaderboardType::Map)
 				{
 					AddPlayerToLeaderboardMap(game.leaderboard, "Player", game.numEatenApples);
 				}
-				else
+				else if (game.leaderboard.currentType == LeaderboardType::UnorderedMap)
+				{
+					AddPlayerToLeaderboardUnorderedMap(game.leaderboard, "Player", game.numEatenApples);
+				}
+				else // Vector
 				{
 					AddPlayerToLeaderboard(game.leaderboard, "Player", game.numEatenApples);
 				}
@@ -117,12 +169,17 @@ namespace ApplesGame
 			if (sf::Keyboard::isKeyPressed(sf::Keyboard::R))
 			{
 				// При рестарте обновляем только очки игрока
-				if (game.leaderboard.useMapVersion)
+				if (game.leaderboard.currentType == LeaderboardType::Map)
 				{
 					// Для map версии просто обновляем значение
 					game.leaderboard.recordsMap.erase("Player");
 				}
-				else
+				else if (game.leaderboard.currentType == LeaderboardType::UnorderedMap)
+				{
+					// Для unordered_map версии просто обновляем значение
+					game.leaderboard.recordsUnorderedMap.erase("Player");
+				}
+				else // Vector
 				{
 					// Для vector версии удаляем старую запись игрока
 					for (size_t i = 0; i < game.leaderboard.records.size(); ++i)
@@ -136,6 +193,15 @@ namespace ApplesGame
 				}
 
 				StartPlayingState(game);
+			}
+			
+			// Нажатие M для возврата в меню
+			if (sf::Keyboard::isKeyPressed(sf::Keyboard::M))
+			{
+				game.isInMenu = true;
+				game.isGameFinished = false;
+				game.showLeaderboard = false;
+				ResetMenu(game.menu);
 			}
 		}
 	}
@@ -156,12 +222,14 @@ namespace ApplesGame
 		InitPlayer(game.player, game);
 
 		// Init apples
+		game.apples.resize(NUM_APPLES);
 		for (int i = 0; i < NUM_APPLES; ++i)
 		{
 			InitApple(game.apples[i], game);
 		}
 
 		// Init rocks
+		game.rocks.resize(NUM_ROCKS);
 		for (int i = 0; i < NUM_ROCKS; ++i)
 		{
 			InitRock(game.rocks[i], game);
@@ -197,47 +265,166 @@ namespace ApplesGame
 		game.gameOverScoreText.setFont(game.font);
 		game.gameOverScoreText.setCharacterSize(30);
 		game.gameOverScoreText.setFillColor(sf::Color::White);
-		game.gameOverScoreText.setString("Your score: " + std::to_string(game.numEatenApples));
+		game.gameOverScoreText.setString("Your score: " + to_string(game.numEatenApples));
 		game.gameOverScoreText.setPosition(SCREEN_WIDTH / 2.f - game.controlsHintText.getGlobalBounds().width / 4.f , SCREEN_HEIGHT / 2.f + 50.f);
 
 		game.restartHintText.setFont(game.font);
 		game.restartHintText.setCharacterSize(20);
 		game.restartHintText.setFillColor(sf::Color::Yellow);
-		game.restartHintText.setString("Press R to restart");
-		game.restartHintText.setPosition(SCREEN_WIDTH / 2.f - 100.f, SCREEN_HEIGHT - 50.f);
+		game.restartHintText.setString("Press R to restart | Press M for menu");
+		game.restartHintText.setPosition(SCREEN_WIDTH / 2.f - 180.f, SCREEN_HEIGHT - 50.f);
+
+		// Инициализация диалога выхода
+		game.exitDialogBackground.setSize(sf::Vector2f(400.f, 200.f));
+		game.exitDialogBackground.setFillColor(sf::Color(0, 0, 0, 200));
+		game.exitDialogBackground.setPosition(SCREEN_WIDTH / 2.f - 200.f, SCREEN_HEIGHT / 2.f - 100.f);
+		game.exitDialogBackground.setOutlineColor(sf::Color::White);
+		game.exitDialogBackground.setOutlineThickness(3.f);
+
+		game.exitDialogText.setFont(game.font);
+		game.exitDialogText.setCharacterSize(30);
+		game.exitDialogText.setFillColor(sf::Color::White);
+		game.exitDialogText.setString("Do you want to exit?");
+		game.exitDialogText.setPosition(SCREEN_WIDTH / 2.f - 150.f, SCREEN_HEIGHT / 2.f - 70.f);
+
+		game.exitDialogYesText.setFont(game.font);
+		game.exitDialogYesText.setCharacterSize(24);
+		game.exitDialogYesText.setFillColor(sf::Color::Green);
+		game.exitDialogYesText.setString("Yes (Y)");
+		game.exitDialogYesText.setPosition(SCREEN_WIDTH / 2.f - 120.f, SCREEN_HEIGHT / 2.f + 20.f);
+
+		game.exitDialogNoText.setFont(game.font);
+		game.exitDialogNoText.setCharacterSize(24);
+		game.exitDialogNoText.setFillColor(sf::Color::Red);
+		game.exitDialogNoText.setString("No (N)");
+		game.exitDialogNoText.setPosition(SCREEN_WIDTH / 2.f + 30.f, SCREEN_HEIGHT / 2.f + 20.f);
 
 		// Инициализация таблицы лидеров
-		InitLeaderboard(game.leaderboard, game.font);
+		InitLeaderboard(game.leaderboard, game.font, LeaderboardType::Vector);
+		
+		// Инициализация меню
+		InitMenu(game.menu, game.font);
+		game.isInMenu = true;
 
 		StartPlayingState(game);
 	}
 
+	bool ShouldCloseGame(const Game& game)
+	{
+		return GetMenuState(game.menu) == MenuState::Exiting;
+	}
+
 	void UpdateGame(Game& game, float deltaTime)
 	{
-		// Update game state
-		if (!game.isGameFinished)
+		// Update menu or game
+		if (game.isInMenu)
 		{
-			UpdatePlayingState(game, deltaTime);
+			UpdateMenu(game.menu, deltaTime);
+			
+			// Check if player selected Play
+			if (GetMenuState(game.menu) == MenuState::Playing)
+			{
+				game.isInMenu = false;
+				
+				// Apply leaderboard type settings
+				LeaderboardTypeOption lbType = GetLeaderboardType(game.menu);
+				LeaderboardType newType;
+				if (lbType == LeaderboardTypeOption::Vector)
+					newType = LeaderboardType::Vector;
+				else if (lbType == LeaderboardTypeOption::Map)
+					newType = LeaderboardType::Map;
+				else
+					newType = LeaderboardType::UnorderedMap;
+				
+				ChangeLeaderboardType(game.leaderboard, newType);
+				
+				StartPlayingState(game);
+				
+				// Apply difficulty settings
+				DifficultyLevel diff = GetDifficulty(game.menu);
+				if (diff == DifficultyLevel::Easy)
+				{
+					// Easy mode - slower speed
+					SetPlayerSpeed(game.player, INITIAL_SPEED * 0.7f);
+				}
+				else if (diff == DifficultyLevel::Hard)
+				{
+					// Hard mode - faster speed
+					SetPlayerSpeed(game.player, INITIAL_SPEED * 1.3f);
+				}
+				
+				// Apply sound settings
+				if (!IsSoundEnabled(game.menu))
+				{
+					game.eatAppleSound.setVolume(0);
+					game.gameOverSound.setVolume(0);
+				}
+				else
+				{
+					game.eatAppleSound.setVolume(100);
+					game.gameOverSound.setVolume(100);
+				}
+			}
+		}
+		else if (game.isPaused)
+		{
+			// Update pause menu
+			UpdateMenu(game.menu, deltaTime);
+			
+			// Check if player wants to continue
+			if (GetMenuState(game.menu) == MenuState::Playing)
+			{
+				game.isPaused = false;
+			}
+			// Check if player wants to exit to menu
+			else if (GetMenuState(game.menu) == MenuState::MainMenu)
+			{
+				game.isPaused = false;
+				game.isInMenu = true;
+				game.isGameFinished = false;
+				game.showLeaderboard = false;
+			}
 		}
 		else
 		{
-			UpdateGameoverState(game, deltaTime);
+			// Update game state
+			if (!game.isGameFinished)
+			{
+				UpdatePlayingState(game, deltaTime);
+			}
+			else
+			{
+				UpdateGameoverState(game, deltaTime);
+			}
 		}
 	}
 
 	void DrawGame(Game& game, sf::RenderWindow& window)
 	{
+		// Draw menu or game
+		if (game.isInMenu)
+		{
+			DrawMenu(game.menu, window);
+			
+			// If viewing leaderboard, draw it
+			if (GetMenuState(game.menu) == MenuState::LeaderboardView)
+			{
+				DrawLeaderboard(game.leaderboard, window);
+			}
+			return;
+		}
+		
 		// Draw background
 		window.draw(game.background);
 		
 		// Draw game objects
 		DrawPlayer(game.player, window);
-		for (int i = 0; i < NUM_APPLES; ++i)
+		for (size_t i = 0; i < game.apples.size(); ++i)
 		{
 			DrawApple(game.apples[i], window);
 		}
 
-		for (int i = 0; i < NUM_ROCKS; ++i)
+		for (size_t i = 0; i < game.rocks.size(); ++i)
 		{
 			DrawRock(game.rocks[i], window);
 		}
@@ -261,6 +448,27 @@ namespace ApplesGame
 				DrawLeaderboard(game.leaderboard, window);
 				window.draw(game.restartHintText);
 			}
+		}
+
+		// Draw pause menu
+		if (game.isPaused)
+		{
+			// Dim background
+			sf::RectangleShape dimBackground;
+			dimBackground.setSize(sf::Vector2f(SCREEN_WIDTH, SCREEN_HEIGHT));
+			dimBackground.setFillColor(sf::Color(0, 0, 0, 150));
+			window.draw(dimBackground);
+			
+			DrawMenu(game.menu, window);
+		}
+
+		// Draw exit dialog
+		if (game.showExitDialog)
+		{
+			window.draw(game.exitDialogBackground);
+			window.draw(game.exitDialogText);
+			window.draw(game.exitDialogYesText);
+			window.draw(game.exitDialogNoText);
 		}
 	}
 

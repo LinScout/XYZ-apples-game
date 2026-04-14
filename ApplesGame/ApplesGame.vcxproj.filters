@@ -28,6 +28,9 @@
     <ClCompile Include="Leaderboard.cpp">
       <Filter>Sources</Filter>
     </ClCompile>
+    <ClCompile Include="Menu.cpp">
+      <Filter>Sources</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="Player.h">
@@ -49,6 +52,9 @@
       <Filter>Sources</Filter>
     </ClInclude>
     <ClInclude Include="Leaderboard.h">
+      <Filter>Sources</Filter>
+    </ClInclude>
+    <ClInclude Include="Menu.h">
       <Filter>Sources</Filter>
     </ClInclude>
   </ItemGroup>

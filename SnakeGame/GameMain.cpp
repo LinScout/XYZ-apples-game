@@ -1,67 +1,61 @@
-﻿// ©2023, XYZ School. All rights reserved.
-// Authored by Aleksandr Rybalka (polterageist@gmail.com)
-
-#include <SFML/Graphics.hpp>
-#include <cstdlib>
-
+﻿#include <SFML/Graphics.hpp>
+#include <ctime>
 #include "Game.h"
 
 using namespace SnakeGame;
 
 int main()
 {
-	// Init random number generator
-	unsigned int seed = (unsigned int)time(nullptr); // Get current time as seed. You can also use any other number to fix randomization
-	srand(seed);
+	srand((unsigned int)time(nullptr));
 
-	// Init window
-	sf::RenderWindow window(sf::VideoMode(SnakeGame::SCREEN_WIDTH, SnakeGame::SCREEN_HEGHT), "SnakeGame");
+	sf::RenderWindow window(sf::VideoMode(SCREEN_WIDTH, SCREEN_HEIGHT), "Snake Game");
 
-	// We now use too much memory for stack, so we need to allocate it on heap
-	SnakeGame::Game* game = new SnakeGame::Game();
+	Game* game = new Game();
 	InitGame(*game);
 
-	// Init game clock
-	sf::Clock gameClock;
-	
-	// Game loop
-	while (window.isOpen()) {
-		
-		float startTime = gameClock.getElapsedTime().asSeconds();
-		
-		HandleWindowEvents(*game, window);
+	sf::Clock clock;
+	float lastTime = clock.getElapsedTime().asSeconds();
 
-		if (!window.isOpen()) {
-			break;
-		}
+	while (window.isOpen())
+	{
+		float currentTime = clock.getElapsedTime().asSeconds();
+		float deltaTime = currentTime - lastTime;
+		lastTime = currentTime;
 
-		if (UpdateGame(*game, TIME_PER_FRAME))
+		sf::Event event;
+		while (window.pollEvent(event))
 		{
-			// Draw everything here
-			// Clear the window first
-			window.clear();
+			if (event.type == sf::Event::Closed)
+				window.close();
 
-			DrawGame(*game, window);
+			if (event.type == sf::Event::KeyPressed)
+			{
+				if (event.key.code == sf::Keyboard::Escape && !game->isInMenu && !game->isPaused)
+				{
+					game->isInMenu = true;
+					ResetMenu(game->menu);
+				}
+				else if (event.key.code == sf::Keyboard::P && !game->isInMenu && !game->isGameOver)
+				{
+					game->isPaused = !game->isPaused;
+					if (game->isPaused) ShowPauseMenu(game->menu);
+				}
+			}
+		}
 
-			// End the current frame, display window contents on screen
-			window.display();
-		}
-		else
-		{
-			window.close();
-		}
+		if (ShouldCloseGame(*game)) { window.close(); break; }
 
-		float endTime = gameClock.getElapsedTime().asSeconds();
-		float deltaTime = endTime - startTime;
-		if (deltaTime < TIME_PER_FRAME) {
-			// Reduce framerate to not spam CPU and GPU
-			sf::sleep(sf::seconds(TIME_PER_FRAME - deltaTime));
-		}
+		UpdateGame(*game, deltaTime);
+
+		window.clear();
+		DrawGame(*game, window);
+		window.display();
+
+		float elapsed = clock.getElapsedTime().asSeconds() - currentTime;
+		if (elapsed < TIME_PER_FRAME)
+			sf::sleep(sf::seconds(TIME_PER_FRAME - elapsed));
 	}
 
-	ShutdownGame(*game);
 	delete game;
-	game = nullptr;
-
 	return 0;
 }

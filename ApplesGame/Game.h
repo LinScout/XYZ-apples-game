@@ -7,6 +7,10 @@
 #include "Apple.h"
 #include "Rock.h"
 #include "Leaderboard.h"
+#include "Menu.h"
+#include <vector>
+
+using namespace std;
 
 namespace ApplesGame
 {
@@ -15,17 +19,24 @@ namespace ApplesGame
 		Rectangle screenRect;
 		
 		Player player;
-		Apple apples[NUM_APPLES];
-		Rock rocks[NUM_ROCKS];
+		vector<Apple> apples;
+		vector<Rock> rocks;
 
 		// Global game data
 		int numEatenApples = 0;
 		bool isGameFinished = false;
 		float timeSinceGameFinish = 0.f;
 		bool showLeaderboard = false;
+		bool showExitDialog = false;
+		float timeSinceLastKeyPress = 0.f;
+		bool isInMenu = true;
+		bool isPaused = false;
 
 		// Leaderboard
 		Leaderboard leaderboard;
+		
+		// Menu
+		Menu menu;
 
 		// Resources
 		sf::Texture playerTexture;
@@ -46,12 +57,18 @@ namespace ApplesGame
 		sf::Text gameOverText;
 		sf::Text gameOverScoreText;
 		sf::Text restartHintText;
+		sf::Text exitDialogText;
+		sf::Text exitDialogYesText;
+		sf::Text exitDialogNoText;
+		sf::RectangleShape exitDialogBackground;
 	};
 
 	void InitGame(Game& game);
 	void UpdateGame(Game& game, float deltaTime);
 	void DrawGame(Game& game, sf::RenderWindow& window);
 	void DeinializeGame(Game& game);
+	bool HandleExitDialog(Game& game);
+	bool ShouldCloseGame(const Game& game);
 
 	void StartPlayingState(Game& game);
 	void UpdatePlayingState(Game& game, float deltaTime);
@@ -59,5 +76,3 @@ namespace ApplesGame
 	void StartGameoverState(Game& game);
 	void UpdateGameoverState(Game& game, float deltaTime);
 }
-
-

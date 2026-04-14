@@ -158,31 +158,22 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
-    <ClCompile Include="Sprite.cpp" />
-    <ClCompile Include="Game.cpp" />
     <ClCompile Include="GameMain.cpp" />
-    <ClCompile Include="GameStatePauseMenu.cpp" />
-    <ClCompile Include="GameStateGameOver.cpp" />
-    <ClCompile Include="GameStateMainMenu.cpp" />
-    <ClCompile Include="GameStatePlaying.cpp" />
-    <ClCompile Include="GameStateRecords.cpp" />
-    <ClCompile Include="Menu.cpp" />
-    <ClCompile Include="Text.cpp" />
+    <ClCompile Include="Game.cpp" />
     <ClCompile Include="Snake.cpp" />
+    <ClCompile Include="Food.cpp" />
+    <ClCompile Include="Math.cpp" />
+    <ClCompile Include="Menu.cpp" />
+    <ClCompile Include="Leaderboard.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="Sprite.h" />
-    <ClInclude Include="Game.h" />
     <ClInclude Include="GameSettings.h" />
-    <ClInclude Include="GameStatePauseMenu.h" />
-    <ClInclude Include="GameStateGameOver.h" />
-    <ClInclude Include="GameStateMainMenu.h" />
-    <ClInclude Include="GameStatePlaying.h" />
-    <ClInclude Include="GameStateRecords.h" />
-    <ClInclude Include="Menu.h" />
-    <ClInclude Include="Text.h" />
+    <ClInclude Include="Game.h" />
     <ClInclude Include="Snake.h" />
-    <ClInclude Include="Vector.h" />
+    <ClInclude Include="Food.h" />
+    <ClInclude Include="Math.h" />
+    <ClInclude Include="Menu.h" />
+    <ClInclude Include="Leaderboard.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

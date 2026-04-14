@@ -3,6 +3,7 @@
 
 #include <SFML/Graphics.hpp>
 #include <SFML/Audio.hpp>
+#include <ctime>
 #include "Constants.h"
 #include "Game.h"
 
@@ -45,12 +46,48 @@ int main()
 			}
 			if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::Escape)
 			{
+				if (!game.isInMenu && !game.showExitDialog && !game.isPaused)
+				{
+					game.showExitDialog = true;
+					game.timeSinceLastKeyPress = 0.f;
+				}
+			}
+			if (event.type == sf::Event::KeyPressed && event.key.code == sf::Keyboard::P)
+			{
+				if (!game.isInMenu && !game.isGameFinished && !game.showExitDialog)
+				{
+					game.isPaused = !game.isPaused;
+					if (game.isPaused)
+					{
+						ShowPauseMenu(game.menu);
+					}
+				}
+			}
+		}
+
+		// Check if should close from menu
+		if (ShouldCloseGame(game))
+		{
+			window.close();
+			break;
+		}
+
+		// Update timer for key press delay
+		game.timeSinceLastKeyPress += deltaTime;
+
+		// Handle exit dialog
+		if (game.showExitDialog)
+		{
+			if (HandleExitDialog(game))
+			{
 				window.close();
 				break;
 			}
 		}
-
-		UpdateGame(game, deltaTime);
+		else
+		{
+			UpdateGame(game, deltaTime);
+		}
 
 		// Draw game
 		window.clear();

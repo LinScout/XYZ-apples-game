@@ -1,48 +1,60 @@
 #pragma once
 #include <SFML/Graphics.hpp>
+#include <vector>
+#include "Math.h"
 #include "GameSettings.h"
-#include <list>
-#include <array>
 
 namespace SnakeGame
 {
-	enum class SnakeDirection
+	enum class Direction { Up, Down, Left, Right };
+
+	struct SnakeTextures
 	{
-		Up = 0,
-		Right,
-		Down,
-		Left
+		// Head — one per direction
+		sf::Texture head_up, head_down, head_left, head_right;
+		// Body straight
+		sf::Texture body_vertical, body_horizontal;
+		// Body bends
+		sf::Texture body_topleft, body_topright, body_bottomleft, body_bottomright;
+		// Tail — one per direction
+		sf::Texture tail_up, tail_down, tail_left, tail_right;
+		// Food
+		sf::Texture apple;
 	};
 
-	enum class SnakePart : uint8_t
+	struct SnakeSegment
 	{
-		Head = 0,
-		Body,
-		BodyBend,
-		Tail,
-		Count
+		Position2D position;
+		Direction  from = Direction::Right; // direction we came FROM (prev segment)
+		Direction  to   = Direction::Right; // direction we go TO   (next segment)
+		sf::Sprite sprite;
 	};
 
 	struct Snake
 	{
-		std::list<sf::Sprite> body;
-		std::list<sf::Sprite>::iterator head;
-		std::list<sf::Sprite>::iterator tail;
-		float speed = 0.f; // Pixels per second
-		SnakeDirection direction = SnakeDirection::Up;
-		SnakeDirection prevDirection = SnakeDirection::Up;
-		std::array<sf::Texture, (size_t)SnakePart::Count> textures;
+		std::vector<SnakeSegment> segments;
+		Direction direction     = Direction::Right;
+		Direction nextDirection = Direction::Right;
+		float moveTimer         = 0.f;
+		float moveInterval      = INITIAL_SPEED;
+		bool  isAlive           = true;
+		bool  shouldGrowTail    = false;
 	};
 
-	void LoadSnakeTextures(Snake& snake);
-	void InitSnake(Snake& snake);
-	void MoveSnake(Snake& snake, float timeDelta);
-	void GrowSnake(Snake& snake);
-	void DrawSnake(Snake& snake, sf::RenderWindow& window);
+	bool LoadSnakeTextures(SnakeTextures& tex);
 
-	bool HasSnakeCollisionWithRect(const Snake& snake, const sf::FloatRect& rect);
-	bool CheckSnakeCollisionWithHimself(Snake& snake);
-	bool CheckSnakeCollisionWithSprite(Snake& snake, const sf::Sprite& sprite);
-	
-	sf::Vector2f GetDirectionVector(SnakeDirection direction);	
+	void InitSnake(Snake& snake, const SnakeTextures& tex);
+	void SetSnakeDirection(Snake& snake, Direction dir);
+	void UpdateSnake(Snake& snake, float deltaTime);
+	void MoveSnake(Snake& snake, const SnakeTextures& tex);
+	void GrowSnake(Snake& snake, const SnakeTextures& tex);
+	bool CheckSelfCollision(const Snake& snake);
+	bool CheckFoodCollision(const Snake& snake, const Position2D& foodPos);
+	void DrawSnake(const Snake& snake, sf::RenderWindow& window);
+	const Position2D& GetHeadPosition(const Snake& snake);
+
+	// Returns the correct texture for a body/head/tail segment
+	const sf::Texture& GetHeadTexture(const SnakeTextures& tex, Direction dir);
+	const sf::Texture& GetTailTexture(const SnakeTextures& tex, Direction dir);
+	const sf::Texture& GetBodyTexture(const SnakeTextures& tex, Direction from, Direction to);
 }

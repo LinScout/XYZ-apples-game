@@ -78,19 +78,27 @@ namespace SnakeGame
 
 		if (sf::Keyboard::isKeyPressed(sf::Keyboard::Up))
 		{
-			data.snake.direction = SnakeDirection::Up;
+			if (data.snake.direction != SnakeDirection::Down) {
+				data.snake.direction = SnakeDirection::Up;
+			}
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Right))
 		{
-			data.snake.direction = SnakeDirection::Right;
+			if (data.snake.direction != SnakeDirection::Left) {
+				data.snake.direction = SnakeDirection::Right;
+			}
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Down))
 		{
-			data.snake.direction = SnakeDirection::Down;
+			if (data.snake.direction != SnakeDirection::Up) {
+				data.snake.direction = SnakeDirection::Down;
+			}
 		}
 		else if (sf::Keyboard::isKeyPressed(sf::Keyboard::Left))
 		{
-			data.snake.direction = SnakeDirection::Left;
+			if (data.snake.direction != SnakeDirection::Right) {
+				data.snake.direction = SnakeDirection::Left;
+			}
 		}
 
 		// Update snake
@@ -113,7 +121,7 @@ namespace SnakeGame
 			}
 		}
 
-		bool isGameFinished = !((std::uint8_t)game.options & (std::uint8_t)GameOptions::InfiniteApples);
+		bool isGameFinished = !((std::uint8_t)game.options & (std::uint8_t)GameOptions::InfiniteApples) && (data.numEatenApples >= MAX_APPLES);
 		
 		if (isGameFinished
 			|| HasSnakeCollisionWithScreenBorder(data.snake, data.background.getGlobalBounds()) // Check collision with screen border
